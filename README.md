@@ -59,6 +59,7 @@ Pass criteria:
 - No OpenClaw `npm install` process is still running.
 - CPU and memory settle after startup.
 - `openclaw doctor --non-interactive --no-workspace-suggestions` shows plugin errors at zero.
+- `openclaw gateway probe --json` reports `ok: true`, `connect.rpcOk: true`, no `probe_scope_limited` warning, and at least `read_only` capability.
 
 Useful commands:
 
@@ -66,8 +67,30 @@ Useful commands:
 systemctl --user status openclaw-gateway.service --no-pager -l
 journalctl --user -u openclaw-gateway.service --since '10 minutes ago' --no-pager -o short-iso
 openclaw doctor --non-interactive --no-workspace-suggestions
+openclaw gateway probe --json
 openclaw channels status --json
 ```
+
+## Update Restart Probe Drift
+
+After an otherwise clean package update, `openclaw update` can report a misleading port conflict if the restarted gateway is alive but the local CLI device token lacks `operator.read`.
+
+Evidence pattern:
+- `systemctl --user status openclaw-gateway.service` shows the gateway active on port `18789`.
+- `openclaw gateway status --deep` reaches the gateway but shows `Capability: connected-no-operator-scope`.
+- `openclaw status --deep --json` reports `gateway.error = "missing scope: operator.read"`.
+- `openclaw gateway probe --json` reports a pending scope upgrade request.
+
+Supported repair path:
+
+```bash
+openclaw devices list --json
+openclaw gateway probe --json
+openclaw devices approve <requestId> --token "$(jq -r '.gateway.auth.token' /root/.openclaw/openclaw.json)" --json
+openclaw gateway probe --json
+```
+
+Do not patch package files for this. The root cause is local operator device auth drift, not a broken listener.
 
 ## Restore Rules
 
